@@ -78,7 +78,7 @@ function Game:enter()
                     col = {1,1,1},
                     img = Image.spikes
                 })
-            elseif math.random() < 0.05 and j > 1 then
+            elseif math.random() < 0.01 and j > 1 then
                 local t = map:set(i,j, {
                     type = 8,
                     col = {1,1,1},
@@ -97,17 +97,17 @@ function Game:enter()
                     col = {1,1,1},
                     img = Image.block
                 })
-            elseif math.random() < 0.1 and j > 1 then
+            elseif math.random() < 0.5 and j > 1 then
                 local t = map:set(i,j, {
                     type = 6,
                     col = {1,1,1},
                     img = Image.gem
                 })
-                local t = map:set(i,j-1, {
-                    type = 5,
-                    col = {1,1,1},
-                    img = Image.block
-                })
+                -- local t = map:set(i,j-1, {
+                --     type = 5,
+                --     col = {1,1,1},
+                --     img = Image.block
+                -- })
             end
         end
     end
@@ -168,6 +168,7 @@ function Game:draw()
     love.graphics.print(love.timer.getFPS(), 0, 0)
     love.graphics.print("hp: "..p.hp, 0, 16)
     love.graphics.print("nrg: "..p.energy, 0, 32)
+    love.graphics.print("$: "..p.money, 0, 48)
     love.graphics.pop()
 end
 local chain = function(a,b) a(); b() end
@@ -240,12 +241,16 @@ local gravity
 gravity = function()
     local t = map:get(p.x, p.y+1)
     if not t or isCollectable(t) or t.type == 4 then --t.type == 4 spike
-        local count = 1
-        for k=2,100 do
+        local count = 0
+        for k=1,100 do
             local t = map:get(p.x, p.y+k)
-            if not t or isCollectable(t) or t.type == 4 then
+            if not t then
                 count = count + 1
+                
             else
+                if t and isCollectable(t) or t.type == 4 then 
+                    count = count + 1
+                end
                 break
             end
         end
@@ -256,7 +261,7 @@ gravity = function()
             elseif t and isCollectable(t) then
                 pickups(t)
                 map:set(p.x,p.y,nil)
-                done()
+                gravity()
             else
                 Sfx.land:play()
                 done()
@@ -274,6 +279,7 @@ falldown = function(x, y)
     if map:get(x, y) then return end
     local t = map:get(x,y-1)
     if t.type == 5 then return end
+    if p.x == x and p.y == y then return end
     map:set(x,y-1,nil)
     map:set(x,y, t)
     falldown(x,y-1)
@@ -316,9 +322,10 @@ local horimove = function(dx, dy)
         p.hp = p.hp - 1
         t.hp = t.hp - 1
         if p.hp <= 0 then
-            Gamestate.switch(death)
+            Gamestate.switch(Death)
         elseif t.hp <= 0 then
             map:set(p.x+dx, p.y, nil)
+            falldown(p.x+dx, p.y)
             Sfx.explo:play()
             addSmoke(p.x+dx, p.y)
             done()
@@ -339,12 +346,16 @@ local horimove = function(dx, dy)
         clear(p.x+dx, p.y, t.type)
         timer.after(0.35, gravity)
     elseif not t and not map:get(p.x+dx, p.y) then
-        tween(0.2, p, {x = p.x + dx}, "linear", gravity)
+        tween(0.2, p, {x = p.x + dx}, "linear", function()
+            falldown(p.x - dx, p.y)
+            gravity()
+        end)
     elseif t and isCollectable(t) then
         pickups(t)
         map:set(p.x+dx, p.y, nil)
-        -- falldown(p.x+dx, p.y)
         tween(0.2, p, {x = p.x + dx}, "linear", function()
+            falldown(p.x + dx, p.y)
+            falldown(p.x - dx, p.y)
             gravity()
         end)
     else
