@@ -17,10 +17,20 @@ local mw, mh
 local moving 
 
 function Game:enter()
+    Sfx.explo:setVolume(0.2)
+    Sfx.pickup:setVolume(0.2)
+    Sfx.hit:setVolume(0.2)
+    Sfx.slide:setVolume(0.025)
+    Sfx.fall:setVolume(0.02)
+    Sfx.land:setVolume(0.2)
+    Sfx.drink:setVolume(0.1)
+
     moving = false
+
     love.audio.play(Music.theme)
     Music.theme:setVolume(0.1)
     Music.theme:setLooping(true)
+    
     mw = 10
     mh = 100
 
@@ -29,7 +39,10 @@ function Game:enter()
         y = 0,
         dir = 1,
         frame = 1,
-        animspeed = 10
+        animspeed = 10,
+        hp = 30,
+        energy = 100,
+        money = 0,
     }
 
     cam = Camera(p.x*16, p.y*16)
@@ -64,6 +77,19 @@ function Game:enter()
                     type = 4,
                     col = {1,1,1},
                     img = Image.spikes
+                })
+            elseif math.random() < 0.05 and j > 1 then
+                local t = map:set(i,j, {
+                    type = 8,
+                    col = {1,1,1},
+                    img = Image.energy
+                })
+            elseif math.random() < 0.05 then
+                local t = map:set(i,j, {
+                    type = 7,
+                    col = {1,1,1},
+                    img = Image.blob,
+                    hp = 5
                 })
             elseif math.random() < 0.1 then
                 local t = map:set(i,j, {
@@ -102,7 +128,6 @@ function Game:update(dt)
 end
 
 function Game:draw()
-    love.graphics.print(love.timer.getFPS(), 0, 0)
     cam:attach()
     love.graphics.setColor(1,1,1)
     -- love.graphics.rectangle("fill", p.x*16, p.y*16, 16, 16)
@@ -124,7 +149,7 @@ function Game:draw()
                 if t.questionmark then
                     love.graphics.draw(Image.questionmark, i*16,j*16)
                 else
-                    love.graphics.draw(t.img, i*16,j*16)
+                    love.graphics.draw(t.img, i*16+8,j*16+8, t.r or 0, (t.scale or 1) * (t.dir or 1), t.scale or 1, 8, 8)
                 end
             end
         end
@@ -138,6 +163,12 @@ function Game:draw()
         k:draw()
     end
     cam:detach()
+    love.graphics.push()
+    love.graphics.scale(2,2)
+    love.graphics.print(love.timer.getFPS(), 0, 0)
+    love.graphics.print("hp: "..p.hp, 0, 16)
+    love.graphics.print("nrg: "..p.energy, 0, 32)
+    love.graphics.pop()
 end
 local chain = function(a,b) a(); b() end
 
@@ -149,8 +180,31 @@ local isBreakable = function(t)
 end
 
 local isCollectable = function(t)
-    return t.type == 6
+    return t.type == 6 or t.type == 8
 end
+
+function addEffect(x,y, img,r,scale)
+    local r = r or 0
+    local scale = scale or 1
+    local s = {
+        update = function() end,
+        draw = function() 
+            love.graphics.draw(img, x*16+8, y*16+8,r,scale,scale,8,8)
+        end
+    }
+    add(stuff, s)
+    return s
+end
+
+function addHit(x, y)
+    local s = addEffect(x,y,Image.swipe, math.random()*math.pi*2)
+    timer.after(0.05, function()
+        del(stuff, s)
+        local s = addEffect(x,y,Image.hit)
+        timer.after(0.05, function() del(stuff, s) end)
+    end)
+end
+
 
 local addSmoke = function(x,y)
     local k = 1
@@ -172,28 +226,39 @@ local addSmoke = function(x,y)
     add(stuff, s)
 end
 
+local pickups = function(t)
+    if t.type == 6 then
+        p.money = p.money + 5
+        Sfx.pickup:play()
+    elseif t.type == 8 then
+        p.energy = p.energy + 10
+        Sfx.drink:play()
+    end
+end
+
 local gravity 
 gravity = function()
     local t = map:get(p.x, p.y+1)
     if not t or isCollectable(t) or t.type == 4 then --t.type == 4 spike
-        print("down", p.x, p.y)
         local count = 1
         for k=2,100 do
             local t = map:get(p.x, p.y+k)
-            if not t or t.type == 6 or t.type == 4 then
+            if not t or isCollectable(t) or t.type == 4 then
                 count = count + 1
             else
                 break
             end
         end
-        tween(0.15*count, p, {y = p.y + count}, "expo", function()
+        tween(0.15*count, p, {y = p.y + count}, "linear", function()
             local t = map:get(p.x, p.y)
             if t and t.type == 4 then
                 Gamestate.switch(Death)
-            elseif t and t.type == 6 then
+            elseif t and isCollectable(t) then
+                pickups(t)
                 map:set(p.x,p.y,nil)
                 done()
             else
+                Sfx.land:play()
                 done()
             end
         end)
@@ -213,6 +278,8 @@ falldown = function(x, y)
     map:set(x,y, t)
     falldown(x,y-1)
     falldown(x,y+1)
+    local s = Sfx.slide:play()
+    s:setPitch(0.5+math.random()*0.5)
 end
 
 -- remove all adjacent of same color
@@ -222,6 +289,12 @@ clear = function(x,y,typ)
     if map:get(x,y).type == typ then
         map:set(x, y, nil)
         addSmoke(x,y)
+        timer.after(math.random()*0.1, function()
+            local s = Sfx.explo:play()
+            s:setVolume(0.05)
+            s:setPitch(0.1+math.random()*0.5)
+        end)
+        
         timer.after(0.25, function() falldown(x,y) end)
     else
         return
@@ -232,15 +305,43 @@ clear = function(x,y,typ)
     clear(x, y-1, typ)
 end
 
+
 local horimove = function(dx, dy)
+    if p.x + dx <= 0 or p.x + dx > mw then return end
+
     start()
     local t = map:get(p.x+dx, p.y)
-    if t and isBreakable(t) then 
+    if t and t.type == 7 then
+        -- enemy
+        p.hp = p.hp - 1
+        t.hp = t.hp - 1
+        if p.hp <= 0 then
+            Gamestate.switch(death)
+        elseif t.hp <= 0 then
+            map:set(p.x+dx, p.y, nil)
+            Sfx.explo:play()
+            addSmoke(p.x+dx, p.y)
+            done()
+        else
+            t.dir = dx < 0 and -1 or 1
+            Sfx.hit:setPitch(0.8+math.random()*0.4)
+            Sfx.hit:play()
+            addHit(p.x+dx, p.y)
+            timer.after(0.1, function()
+                Sfx.hit:setPitch(0.8+math.random()*0.4)
+                Sfx.hit:play()
+                addHit(p.x, p.y)
+                done()
+            end)
+        end
+    elseif t and isBreakable(t) then 
+        love.audio.play(Sfx.explo)
         clear(p.x+dx, p.y, t.type)
         timer.after(0.35, gravity)
     elseif not t and not map:get(p.x+dx, p.y) then
         tween(0.2, p, {x = p.x + dx}, "linear", gravity)
     elseif t and isCollectable(t) then
+        pickups(t)
         map:set(p.x+dx, p.y, nil)
         -- falldown(p.x+dx, p.y)
         tween(0.2, p, {x = p.x + dx}, "linear", function()
@@ -251,8 +352,22 @@ local horimove = function(dx, dy)
     end
 end
 
+function depleteEnergy()
+    
+    if p.energy <= 0 then 
+        p.hp = p.hp - 1
+        if p.hp <= 0 then
+            Gamestate.switch(Death)
+        end
+    else
+        p.energy = p.energy - 1
+    end
+end
+
 function Game:keypressed(key)
     if moving then return end
+    depleteEnergy()
+    
     if key == "left" then
         p.dir = -1
         horimove(-1, 0)
@@ -265,6 +380,7 @@ function Game:keypressed(key)
         start()
         local t = map:get(p.x, p.y+1)
         if t then 
+            love.audio.play(Sfx.explo)
             clear(p.x, p.y+1, t.type) 
             timer.after(0.2, gravity)
             -- gravity()
