@@ -8,8 +8,19 @@ local tween = timer.tween
 
 Death = Gamestate.new()
 
-Death.enter = function()
+local locked = true
+
+Death.enter = function(self)
+    timer:clear()
     love.audio.stop()
+    Music.death:setVolume(0.2)
+    Music.death:play()
+    locked = true
+    timer.after(2, function() locked = false end)
+end
+
+Death.update = function(self, dt)
+    timer.update(dt)
 end
 
 Death.draw = function()
@@ -22,5 +33,9 @@ Death.draw = function()
 end
 
 Death.keypressed = function()
-    Gamestate.switch(Startscreen)
+    if locked then return end
+    timer.after(0.2, function()
+        locked = true
+        Gamestate.switch(Startscreen)
+    end)
 end

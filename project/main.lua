@@ -121,7 +121,7 @@ function love.load(arg)
     -- print "Require Sources:"
 	recursiveRequire("src")
 	Gamestate.registerEvents()
-	Gamestate.switch(Startscreen)
+	Gamestate.switch(Logoscreen)
 end
 
 -- Logic

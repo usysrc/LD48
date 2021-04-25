@@ -9,9 +9,9 @@ distdir=../bin/
 windir=~/dist/love-11.3-win64
 osxapp=~/dist/love.app/
 
-game=GAMENAME
+game=TheodoresTumble
 sources=main.lua src/**/*.lua libs/**/*.lua **/*.lua *.lua
-res=img/*.* music/*.* sfx/*.*
+res=img/*.* music/*.* sfx/*.* fonts/*.*
 
 .PHONY : run test love clean win
 
